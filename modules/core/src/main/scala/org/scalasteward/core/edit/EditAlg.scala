@@ -23,7 +23,7 @@ import fs2.Stream
 import io.chrisdavenport.log4cats.Logger
 import org.scalasteward.core.buildtool.BuildToolDispatcher
 import org.scalasteward.core.data.Update
-import org.scalasteward.core.io.{isSourceFile, FileAlg, WorkspaceAlg}
+import org.scalasteward.core.io.{FileAlg, WorkspaceAlg}
 import org.scalasteward.core.scalafix.MigrationAlg
 import org.scalasteward.core.util._
 import org.scalasteward.core.vcs.data.Repo
@@ -46,7 +46,7 @@ final class EditAlg[F[_]](implicit
       files <- fileAlg.findFilesContaining(
         repoDir,
         update.currentVersion,
-        isSourceFile(update, fileExtensions)
+        fileAllowedToEdit(update, fileExtensions)
       )
       noFilesFound = logger.warn("No files found that contain the current version")
       _ <- files.toNel.fold(noFilesFound)(applyUpdateTo(_, update))

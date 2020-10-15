@@ -21,6 +21,7 @@ import cats.data.OptionT
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import org.scalasteward.core.data._
+import org.scalasteward.core.edit.pathAllowedToEdit
 import org.scalasteward.core.nurture.PullRequestRepository
 import org.scalasteward.core.repocache.{RepoCache, RepoCacheRepository}
 import org.scalasteward.core.repoconfig.{PullRequestFrequency, RepoConfig, RepoConfigAlg}
@@ -47,12 +48,10 @@ final class PruningAlg[F[_]](implicit
       case None => F.pure((false, List.empty))
       case Some(repoCache) =>
         repoConfigAlg.mergeWithDefault(repoCache.maybeRepoConfig).flatMap { repoConfig =>
-          val ignoreScalaDependency = !repoConfig.updates.includeScalaOrDefault
           val dependencies = repoCache.dependencyInfos
             .flatMap(_.sequence)
             .collect {
-              case info if !ignoreDependency(info.value, ignoreScalaDependency) =>
-                info.map(_.dependency)
+              case info if !ignoreDependency(info.value, repoConfig) => info.map(_.dependency)
             }
             .sorted
           findUpdatesNeedingAttention(repo, repoCache, repoConfig, dependencies)
@@ -172,10 +171,15 @@ final class PruningAlg[F[_]](implicit
 }
 
 object PruningAlg {
-  def ignoreDependency(info: DependencyInfo, ignoreScalaDependency: Boolean): Boolean =
-    info.filesContainingVersion.isEmpty ||
-      FilterAlg.isScalaDependencyIgnored(info.dependency, ignoreScalaDependency) ||
-      FilterAlg.isDependencyConfigurationIgnored(info.dependency)
+  def ignoreDependency(info: DependencyInfo, repoConfig: RepoConfig): Boolean = {
+    val dependency = info.dependency
+    val extensions = repoConfig.updates.fileExtensionsOrDefault
+    val ignoreScalaDependency = !repoConfig.updates.includeScalaOrDefault
+
+    !info.filesContainingVersion.exists(pathAllowedToEdit(dependency, extensions)) ||
+    FilterAlg.isScalaDependencyIgnored(dependency, ignoreScalaDependency) ||
+    FilterAlg.isDependencyConfigurationIgnored(dependency)
+  }
 
   def collectOutdatedDependencies(updateStates: List[UpdateState]): List[DependencyOutdated] =
     updateStates.collect { case state: DependencyOutdated => state }

@@ -16,7 +16,9 @@
 
 package org.scalasteward.core
 
+import better.files.File
 import cats.implicits._
+import org.scalasteward.core.data.{Dependency, GroupId, Update}
 import org.scalasteward.core.util.Change.Unchanged
 import org.scalasteward.core.util.{Change, Nel}
 import scala.collection.mutable
@@ -70,4 +72,27 @@ package object edit {
       flush(off, false)
       Nel.fromListUnsafe(buffer.toList)
     }
+
+  def fileAllowedToEdit(update: Update, defaultExtensions: Set[String])(file: File): Boolean =
+    !file.toString.contains(".git/") &&
+      update.dependencies.exists(pathAllowedToEdit(_, defaultExtensions)(file.toString))
+
+  def pathAllowedToEdit(dep: Dependency, defaultExtensions: Set[String])(path: String): Boolean =
+    matchesExtension(path, allowedExtensions(dep, defaultExtensions))
+
+  private def matchesExtension(path: String, extensions: Set[String]): Boolean =
+    extensions.exists(path.endsWith)
+
+  private def allowedExtensions(dep: Dependency, defaultExtensions: Set[String]): Set[String] =
+    () match {
+      case _ if isSbt(dep)          => Set("build.properties")
+      case _ if isScalafmtCore(dep) => Set(".scalafmt.conf")
+      case _                        => defaultExtensions
+    }
+
+  private def isSbt(dep: Dependency): Boolean =
+    dep.groupId === GroupId("org.scala-sbt") && dep.artifactId.name === "sbt"
+
+  private def isScalafmtCore(dep: Dependency): Boolean =
+    dep.groupId === GroupId("org.scalameta") && dep.artifactId.name === "scalafmt-core"
 }
