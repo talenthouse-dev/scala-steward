@@ -23,7 +23,7 @@ import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.semiauto._
 import io.circe.refined._
 import io.circe.{Decoder, Encoder}
-import org.scalasteward.core.data.{GroupId, Update}
+import org.scalasteward.core.data.{Dependency, GroupId, Update}
 import org.scalasteward.core.update.FilterAlg.{
   FilterResult,
   IgnoredByConfig,
@@ -41,7 +41,7 @@ final case class UpdatesConfig(
     fileExtensions: List[String] = List.empty
 ) {
   def keep(update: Update.Single): FilterResult =
-    isAllowed(update).flatMap(isPinned).flatMap(isIgnored)
+    isScalaIgnored(update).flatMap(isAllowed).flatMap(isPinned).flatMap(isIgnored)
 
   def fileExtensionsOrDefault: Set[String] =
     if (fileExtensions.isEmpty)
@@ -77,6 +77,21 @@ final case class UpdatesConfig(
     else
       Left(IgnoredByConfig(update))
   }
+
+  private def isScalaIgnored(update: Update.Single): FilterResult = {
+    val isScala = isScalaDependency(update.crossDependency.head)
+    if (isScala && !includeScalaOrDefault) Left(IgnoredByConfig(update)) else Right(update)
+  }
+
+  private def isScalaDependency(dependency: Dependency): Boolean =
+    (dependency.groupId.value, dependency.artifactId.name) match {
+      case ("org.scala-lang", "scala-compiler") => true
+      case ("org.scala-lang", "scala-library")  => true
+      case ("org.scala-lang", "scala-reflect")  => true
+      case ("org.scala-lang", "scalap")         => true
+      case ("org.typelevel", "scala-library")   => true
+      case _                                    => false
+    }
 }
 
 object UpdatesConfig {

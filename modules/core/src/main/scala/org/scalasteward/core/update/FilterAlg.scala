@@ -65,36 +65,23 @@ object FilterAlg {
   final case class NoSuitableNextVersion(update: Update.Single) extends RejectionReason
   final case class VersionOrderingConflict(update: Update.Single) extends RejectionReason
 
-  def globalFilter(update: Update.Single): FilterResult =
+  private def globalFilter(update: Update.Single): FilterResult =
     removeBadVersions(update)
       .flatMap(selectSuitableNextVersion)
       .flatMap(checkVersionOrdering)
 
-  private def localFilter(update: Update.Single, repoConfig: RepoConfig): FilterResult =
+  def localFilter(update: Update.Single, repoConfig: RepoConfig): FilterResult =
     repoConfig.updates.keep(update).flatMap(globalFilter)
 
-  def isScalaDependency(dependency: Dependency): Boolean =
-    (dependency.groupId.value, dependency.artifactId.name) match {
-      case ("org.scala-lang", "scala-compiler") => true
-      case ("org.scala-lang", "scala-library")  => true
-      case ("org.scala-lang", "scala-reflect")  => true
-      case ("org.scala-lang", "scalap")         => true
-      case ("org.typelevel", "scala-library")   => true
-      case _                                    => false
-    }
-
-  def isScalaDependencyIgnored(dependency: Dependency, ignoreScalaDependency: Boolean): Boolean =
-    ignoreScalaDependency && isScalaDependency(dependency)
-
   def isDependencyConfigurationIgnored(dependency: Dependency): Boolean =
-    (dependency.configurations.fold("")(_.toLowerCase) match {
+    dependency.configurations.fold("")(_.toLowerCase) match {
       case "phantom-js-jetty"    => true
       case "scalafmt"            => true
       case "scripted-sbt"        => true
       case "scripted-sbt-launch" => true
       case "tut"                 => true
       case _                     => false
-    })
+    }
 
   private def selectSuitableNextVersion(update: Update.Single): FilterResult = {
     val newerVersions = update.newerVersions.map(Version.apply).toList

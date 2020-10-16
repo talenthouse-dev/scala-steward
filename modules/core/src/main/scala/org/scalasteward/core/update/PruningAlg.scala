@@ -46,30 +46,23 @@ final class PruningAlg[F[_]](implicit
     repoCacheRepository.findCache(repo).flatMap {
       case None => F.pure((false, List.empty))
       case Some(repoCache) =>
-        repoConfigAlg.mergeWithDefault(repoCache.maybeRepoConfig).flatMap { repoConfig =>
-          val ignoreScalaDependency = !repoConfig.updates.includeScalaOrDefault
-          val dependencies = repoCache.dependencyInfos
-            .flatMap(_.sequence)
-            .collect {
-              case info if !ignoreDependency(info.value, ignoreScalaDependency) =>
-                info.map(_.dependency)
-            }
-            .sorted
-          findUpdatesNeedingAttention(repo, repoCache, repoConfig, dependencies)
-        }
+        val dependencies = repoCache.dependencyInfos
+          .flatMap(_.sequence)
+          .collect { case info if !ignoreDependency(info.value) => info.map(_.dependency) }
+          .sorted
+        findUpdatesNeedingAttention(repo, repoCache, dependencies)
     }
 
   private def findUpdatesNeedingAttention(
       repo: Repo,
       repoCache: RepoCache,
-      repoConfig: RepoConfig,
       dependencies: List[Scope.Dependency]
-  ): F[(Boolean, List[Update.Single])] = {
-
-    val depsWithoutResolvers = dependencies.map(_.value).distinct
+  ): F[(Boolean, List[Update.Single])] =
     for {
       _ <- logger.info(s"Find updates for ${repo.show}")
+      repoConfig <- repoConfigAlg.mergeWithDefault(repoCache.maybeRepoConfig)
       updates0 <- updateAlg.findUpdates(dependencies, repoConfig, None)
+      depsWithoutResolvers = dependencies.map(_.value).distinct
       updateStates0 <- findAllUpdateStates(repo, repoCache, depsWithoutResolvers, updates0)
       outdatedDeps = collectOutdatedDependencies(updateStates0)
       (updateStates1, updates1) <- {
@@ -83,7 +76,6 @@ final class PruningAlg[F[_]](implicit
       _ <- logger.info(util.logger.showUpdates(updates1.widen[Update]))
       result <- checkUpdateStates(repo, repoConfig, updateStates1)
     } yield result
-  }
 
   private def ensureFreshUpdates(
       repoConfig: RepoConfig,
@@ -172,9 +164,8 @@ final class PruningAlg[F[_]](implicit
 }
 
 object PruningAlg {
-  def ignoreDependency(info: DependencyInfo, ignoreScalaDependency: Boolean): Boolean =
+  def ignoreDependency(info: DependencyInfo): Boolean =
     info.filesContainingVersion.isEmpty ||
-      FilterAlg.isScalaDependencyIgnored(info.dependency, ignoreScalaDependency) ||
       FilterAlg.isDependencyConfigurationIgnored(info.dependency)
 
   def collectOutdatedDependencies(updateStates: List[UpdateState]): List[DependencyOutdated] =

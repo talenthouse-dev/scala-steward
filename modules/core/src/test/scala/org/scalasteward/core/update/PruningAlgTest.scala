@@ -73,7 +73,7 @@ class PruningAlgTest extends AnyFunSuite with Matchers {
     )
   }
 
-  test("needsAttention: 0 updates when includeScala not specified in repo config") {
+  test("needsAttention: ignored update when includeScala not specified in repo config") {
     val repo = Repo("fthomas", "scalafix-test")
     val repoCacheFile =
       config.workspace / "store/repo_cache/v1/fthomas/scalafix-test/repo_cache.json"
@@ -171,10 +171,15 @@ class PruningAlgTest extends AnyFunSuite with Matchers {
       commands = Vector(
         List("read", repoCacheFile.toString),
         List("read", defaultConf),
+        List("read", versionsFile.toString),
         List("read", pullRequestsFile.toString)
       ),
       logs = Vector(
         (None, "Find updates for fthomas/scalafix-test"),
+        (
+          None,
+          "Ignore org.scala-lang:scala-library : 2.12.10 -> 2.12.11 -> 2.13.0 -> 2.13.1 (reason: ignored by config)"
+        ),
         (None, "Found 0 updates"),
         (None, "fthomas/scalafix-test is up-to-date")
       )
